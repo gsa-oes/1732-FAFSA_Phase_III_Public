@@ -1,0 +1,244 @@
+---
+title: "Experimental Design for HUD FAFSA 3"
+author: "Michael DiDomenico and Nathaniel Higgins"
+output: html_document
+---
+
+# Purpose
+The purpose of this document is to explain (and implement) the randomization strategy
+for the HUD-FAFSA-3 project.
+
+# Necessary Background
+HUD needs to develop evidence to support an existing grant mechanism which distributes
+money to Public Housing Authorities (PHAs) to hire "navigators" -- individuals who
+assist HUD beneficiaries living in PHAs with their transition from high school to 
+college. If there is promising evidence, the existing grant mechanism is more likely 
+to get continuing appropriations. The more immediate outcomes to residents could be 
+better educational outcomes (more FAFSAs completed, more aid, higher post-secondary 
+attendance, better institutional fit). We will evaluate using the best available design.
+
+In the current granting period, a total of 9 PHAs received funding:
+
+1. Prichard, AL
+2. Pheonix, AZ
+3. Los Angeles, CA
+4. Northwest Georgia
+5. Chicago, IL
+6. High Point, NC
+7. Philadelphia, PA
+8. Seattle, WA
+9. Milwuakee, WI
+
+Four of these PHAs are too small to include in a randomized evaluation and will be 
+excluded from the remainder of the random assignment discussion (Prichard, NW Georgia, 
+High Point, and Phoenix). In each of the four, navigators will attempt to provide 
+assistance to all residents in the targeted age range. HUD and OES are exploring the 
+possibilities of non-experimental comparisons for these PHAs.
+
+## Grant requirements 
+Each PHA has received grant funding to hire at least one navigator. The navigator(s) will 
+attempt to serve residents 15 - 20 years old) living in public housing (including 
+scattered-site housing within the PHA. The population of interest lives in PHA-managed 
+buildings that are managed at an administrative unit called the "AMP". The grant 
+specifies that PHAs will agree to serve AMPs randomly assigned by HUD to receive treatment
+
+
+An AMP usually contains multiple buildings. Buildings may be geographically clustered 
+or spread out across scattered-site housing. Furthermore, in some cases multiple AMPs 
+could comprise one development with several phases of construction. 
+
+Given the diversity of AMP-types, OES relied heavily on local PHA knowledge to form 
+randomization clusters. Each PHA provided HUD with a list of certain AMPs they requested 
+be removed from consideration for various reasons, for example due to geography, overlap
+with other resident programs (e.g., Jobs Plus), or other local knowledge. In a majority 
+of cases, individual AMPs are given their own randomization clusters. However, we have 
+grouped certain AMPs where PHAs expressed a preference for doing so. 
+
+The final lists of AMPs and clusters are provided by PHAs and may not match the most recent
+information included in the Public and Indian Housing Information Center (PIC) database. 
+For example, several PHAs have re-organized AMPs creating new AMPs and discontinuing the 
+use of older AMP ids. Therefore, it will be vital to make sure there is a mechanism in 
+place for creating individual-level datasets that correspond to the randomization clusters 
+for matching to outcome data (e.g., records on FAFSA completion held by the Department of 
+Education).
+
+# Experimental Assignment
+Our experimental design will distribute AMPs within PHAs to treatment. That is, we
+will designate treatment AMPs, and instruct navigators to treat as many
+age-eligible youth within the treatment AMP as they are able to. We will observe outcomes
+at the AMP-level (for example, we will observe the proportion of age-eligible youth
+within each AMP who complete the FAFSA). Each AMP included in the study will be either
+a treatment AMP (navigators instructed to treat as many individuals as possible within
+that AMP) or a control AMP (navigators instructed *not* to treat any individuals living
+within that AMP).
+
+In each PHA where there is more than one navigator, we will not actually dictate which
+navigator will be assigned to which treatment AMP. Instead, we will allow PHAs to
+hire and distribute navigators to treatment AMPs as they see fit. We will, however,
+attempt to prevent any distribution of treatment AMPs that would be infeasible for
+the given number of navigators to serve (see below under "Important Considerations").
+
+## Important Considerations
+We could, in principle, choose AMPs using simple randomization. There are several
+complications that restrict us from using simple randomization on the AMPs listed
+above. We list them here:
+
+1. Because AMPs are of varying size, and because we are limited in the number of
+navigators within PHA, the probability of treatment will not be uniform between PHAs.
+The probability of treatment will be identical within blocks of AMPs, but different
+for AMPs included in the study that are from different PHAs. Implication: we will
+block by PHA and will include PHA fixed effects in the model, using only within-PHA 
+variation to identify treatment effects.
+
+2. Because AMPs are of varying size, and because we will only be able to observe
+important outcomes at the AMP level, we will seek to "flood" AMPs selected for treatment,
+such that a treatment AMP has sufficient staffing by navigators that the navigators
+can serve as many individuals as desire service. Implication: we will (1) exclude from
+the study certain AMPs that are too large and (2) rather than randomizing a set number
+of AMPs to treatment and control, we will continue to assign AMPs to treatment until
+each navigator is fully engaged ("busy"). We will use randomization inference to 
+evaluate all possible assignments to treatment under this unusual distribution method
+(any other ideas?).
+
+
+```{r echo=FALSE}
+# Basic parameters (these are easily changed)
+# Since this program uses random numbers, we'll want to start with setting the seed 
+# so that our work is replicable
+set.seed(3472) # 3472 is random integer chosen using random.org:
+# Timestamp: 2017-03-31 17:16:42 UTC
+
+# Overall individual takeup rate ("rate") for offered services:
+rate <- 0.5 # Set at 0.5 as a baseline
+
+# want to make this adjustable for each PHA
+# List of PHAs and their number of navigators and max load for each. I am giving slightly 
+# smaller caseloads to HACLA and SHA because of there relatively fewer clusters and 
+# number of youth, respectively
+state <- c("CA", "IL", "PA", "WA", "WI")
+nav <- c(3, 3, 2, 3, 1)
+# Max workload ("ml") per navigator
+ml  <- c(125,150,150,82,125)
+
+pha.params <- cbind.data.frame(state,nav,ml)
+
+# call in random assignment library with function that will be used
+library(hudfafsaiii)
+library(knitr)
+```
+
+The number of navigators to be funded by each PHA, the number of AMPs in which youth
+served by the navigators are distributed, the number of those residents to be served 
+(estimated using data provided by PHAs in most cases, but by PIC for Los Angeles), the 
+number of residents who would need to be contacted by the navigators (assuming a takeup 
+rate of the navigator's services of `r rate`), and the total number of residents in the 
+relevant age range are displayed in the table below. Finally, we also display our estimate of 
+the percentage of total residents that the navigators would need to contact in order 
+to be fully engaged (i.e. "busy") assuming a maximum workload of `r ml` students.
+
+# Randomization Procedure
+Taking into account the considerations above, we propose the following randomization
+procedure.
+
+- Stage 1:
+For each PHA, we will eliminate from consideration AMPs that are too large or too small.
+The smallest AMPs -- those with fewer than 10 age-eligible individuals -- are not
+worth traveling to and will be excluded from the study. We will also exclude those 
+AMPs that are so large that the number of age-eligible youth expected to engage navigator 
+services would be more than a single navigator could handle. 
+
+- Stage 2a:
+We will sort AMPs by a random number, assigning the first AMP to treatment, then
+
+- Stage 2b:
+Assigning subsequent AMPs to treatment until the current AMP assigned to treatment 
+exceeds the maximum workload, then
+
+- Stage 3:
+Assigning all remaining AMPs to control.
+
+
+## Threats to the strategy
+XXX
+
+
+# PHAs with the number of navigagors, clusters, and residents
+```{r}
+# Load data
+clusters.with.amps <- read.csv(paste(mywd,"clusters.with.amps.csv",sep=""))
+
+# aggregate total by OES cluster
+clusters <- aggregate(tot_age_eligible ~ OES_cluster + state, data=clusters.with.amps, FUN=sum)
+
+# merge to navigator/workload parameters
+dta <- merge(clusters, pha.params, by="state", all.x=T)
+
+# Create new variables needed for randomization
+# Calculate total number of age-eligible to-be-served in each AMP
+dta$tot.served <- dta$tot_age_eligible*rate
+# Total workload of navigator(s):
+dta$tot.load <- 0
+# Create a treatment indicator
+dta$treat <- 0
+
+# Remove all clusterss w/ fewer than 10 age-eligible youth
+dta <- dta[dta$tot_age_eligible >= 10, ]
+
+# Remove all AMPs w/ too many age-eligible youth to be serviced by a single navigator
+# Not applying to HACLA after consulting with the PHA and HUD
+dta <- subset(dta, state == "CA" | dta$tot_age_eligible <= as.numeric(dta$ml)/rate)
+
+# Number of AMPs in population
+(N <- dim(dta)[1])
+
+
+# this table should be updated to reflect taking out the AMPs PHAs want removed
+table1 <- as.data.frame(as.list(aggregate(tot_age_eligible ~ state + nav + ml, data=dta, FUN=function(x) c(length(x),sum(x)))))
+table1$to.serve <- table1$nav*table1$ml
+table1$to.contact <- table1$to.serve/rate
+table1$pct.to.contact <- table1$to.contact/table1$tot_age_eligible.2*100
+table1$pct.to.contact <- sprintf("%3.1f%%", table1$pct.to.contact)
+names(table1) <- c("State","Navigators","Maximum per Navigator","Clusters","Population","To Serve","To Contact","Percent to Contact")
+kable(table1[order(table1$State),],row.names=F)
+```
+
+Although almost all residents could be contacted in Seattle given the number of navigators,
+unlike Phoenix which had only 5 clusters, Seattle has 15 clusters and a fair number are scattered
+site. We will assign each navigator fewer students in Seattle to attempt to account for this.
+
+
+### Assign a random number to each AMP in the population and sort
+```{r}
+# Random number
+dta$rand <- runif(n = N)
+
+# Sort by random number within PHA
+dta <- dta[order(dta$state, dta$rand), ]
+```
+
+
+### "Regular" PHAs: Chicago, Philly, and Los Angeles
+We will cycle through Chicago, Philly, and Los Angeles using the same assignment 
+strategy. We will address Phoenix, Seattle, and Wisconsin separately (Phoenix and
+Seattle because of their small number of AMPs and small population; Wisconsin because 
+it only has one navigator so travel time between locations becomes more of an issue 
+without the possibility of dividing up geography).
+
+```{r}
+# call the function we created to make the assignments
+substates <- assignment(dta, pha.params = pha.params)
+
+# save the assignments (this is the minimum info necessary, but we can add to it. we
+# may also want to merge back to the original spreadsheets to give these back to phas
+# at the amp level)
+substates.amps <- merge(clusters.with.amps,substates[,c("OES_cluster","treat")],
+   by="OES_cluster",all.X=T)
+
+# This exports with amps so it is easier for PHAs to know where the navigators will serve
+# Seattle is different because Seattle amps break across clusters, so they will need to 
+# use the spreadsheet with the high school districts, so they know how to break apart
+# scattered site amps.
+
+write.csv(substates.amps,paste(mywd,"hud.fafsa.phase3.assignments.amps.csv",sep=""))
+
+```
